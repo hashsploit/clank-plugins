@@ -22,4 +22,3 @@ RUN rm -rf /var/lib/apt/lists/* /var/cache/apt/* \
 	&& echo "COMPRESS=xz" | tee /etc/initramfs-tools/conf.d/compress >/dev/null 2>&1
 
 ENTRYPOINT ["/bin/bash", "/opt/obfuscate.sh"]
-
