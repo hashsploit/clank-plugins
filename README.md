@@ -1,7 +1,8 @@
 # Clank Plugins
 
-This repository is dedicated for example Lua plugins written for [Clank](https://github.com/hashsploit/clank).
+This repository is dedicated for example and trusted Lua plugins written for [Clank](https://github.com/hashsploit/clank).
 
+Lua is a simple and lightweight language that has a low entry-barrier for those who are interested in modding/creating customizable events especially for games that utilize a DME server for gameplay. It is also widely used in many games as a scripting/modding language.
 
 ## Plugins
 
