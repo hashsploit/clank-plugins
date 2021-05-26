@@ -1,4 +1,4 @@
-# Clank Plugins
+![Clank Plugins Logo](clank-plugins-logo.png)
 
 This repository is dedicated for example and trusted Lua plugins written for [Clank](https://github.com/hashsploit/clank).
 
