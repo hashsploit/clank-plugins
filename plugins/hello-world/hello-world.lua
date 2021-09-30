@@ -5,25 +5,30 @@ local commands = {
 }
 
 local function init()
-	print("Hello world plugin initialized!")
+	print("Loaded!")
 end
 
-local function on_connect(client)
+local function shutdown()
+	print("Unloaded!")
+end
+
+local function onConnect(client)
 
 end
 
-local function on_disconnect(client)
+local function onDisconnect(client)
 
 end
 
-local function on_tick()
+local function onTick()
 
 end
 
 return {
 	init = init,
-	on_connect = on_connect,
-	on_disconnect = on_disconnect,
-	on_tick = on_tick,
+	shutdown = shutdown,
+	onConnect = onConnect,
+	onDisconnect = onDisconnect,
+	onTick = onTick,
 	command = commands
 }

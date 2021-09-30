@@ -9,6 +9,7 @@ Lua is a simple and lightweight language that has a low entry-barrier for those 
 This directory holds a collection of clank plugins.
 
 - **hello-world** - This is a demo Hello World example plugin.
+- **LuaInterpreter** - An interactive Lua shell via the `lua` command.
 
 ## Lib
 

@@ -3,6 +3,8 @@ LABEL name="clank-plugins"
 LABEL description="Clank Plugins - This repository is dedicated for example Lua plugins written for Clank."
 LABEL maintainer="hashsploit <hashsploit@protonmail.com>"
 
+ENV TERM="xterm-256color"
+
 # Install dependencies
 RUN echo "Updating packages ..." \
 	&& apt-get update -y >/dev/null 2>&1 \
@@ -21,4 +23,7 @@ RUN rm -rf /var/lib/apt/lists/* /var/cache/apt/* \
 	&& mkdir -p /etc/initramfs-tools/conf.d/ \
 	&& echo "COMPRESS=xz" | tee /etc/initramfs-tools/conf.d/compress >/dev/null 2>&1
 
-ENTRYPOINT ["/bin/bash", "/opt/obfuscate.sh"]
+WORKDIR /mnt
+
+CMD ./clankp debug
+

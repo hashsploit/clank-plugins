@@ -8,11 +8,12 @@ return {
 		minor = 1,
 		revision = 0
 	},
-	init = tp.init,
 	events = {
-		TICK_EVENT = tp.on_tick,
-		CONNECT_EVENT = tp.on_connect,
-		DISCONNECT_EVENT = tp.on_disconnect
+		PLUGIN_INIT_EVENT = tp.init,
+		PLUGIN_SHUTDOWN_EVENT = tp.shutdown,
+		TICK_EVENT = tp.onTick,
+		CONNECT_EVENT = tp.onConnect,
+		DISCONNECT_EVENT = tp.onDisconnect
 	},
 --	run_on = 0x01 | 0x02 | 0x04 | 0x08 | 0x10
 	run_on = {

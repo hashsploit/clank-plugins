@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+
+# Change directory to the current script directory
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd $DIR
+
+SCRIPT="$0"
+
+log() {
+	echo -e "$(tput sgr0)${1}$(tput sgr0)"
+}
+
+check_installed() {
+	# Check if command is installed
+	if ! command -v ${1} &> /dev/null; then
+		return 0
+	fi
+	return 1
+}
+
+require_installed() {
+	# Check if command is installed
+	if ! check_installed ${1} == 0; then
+	log "$(tput bold)$(tput setaf 1)${1} (${2}) is not installed, please install it!$(tput sgr0)"
+	exit 1
+	fi
+}
+
+run() {
+	log "Lua version: $(lua -v)"
+	lua lib/runner.lua ${@}
+	
+	# Fix coloring
+	echo -e "$(tput sgr0)"
+}
+
+compile() {
+	log "Lua version: $(lua -v)"
+	log "Luac version: $(luac -v)"
+	
+	mkdir -p bin/
+	cp -r plugins/* bin/
+	cd bin/
+	
+	for source in $(find . -name "*.lua"); do
+		log "Compiling ${source} ..."
+		
+		# Accept .lub files in package path
+		echo 'package.path = package.path .. ";./?.lub;./?/init.lub"' | cat - ${source} > ${source}.tmp
+		mv ${source}.tmp ${source}
+		
+		binary="${source%.*}.lub"
+		luac -s -o "${binary}" "${source}"
+		
+		rm ${source}
+	done
+}
+
+obfuscate() {
+	log "Lua obfuscator version: LuaSeel 1.2.0"
+	
+	mkdir -p bin/
+	cp -r plugins/* bin/
+	cd bin/
+
+	for source in $(find . -name "*.lua"); do
+		log "Processing ${source} ..."
+		lua ../lib/obfuscator.lua "${source}" > "${source}.tmp"
+		mv "${source}.tmp" "${source}"
+	done
+	
+	cd ${DIR}
+	compile
+	
+	# Fix coloring
+	echo -e "$(tput sgr0)"
+}
+
+package() {
+	mkdir -p compiled/
+	cd compiled/
+	for plugin in $(find . -type d); do
+		cd ${plugin}
+		for source in $(find . -name "*.lu[ab]"); do
+			log "Compiling ${source} ..."
+			binary="${source%.*}.lub"
+			luac -s -o "${binary}" "${source}"
+			mv "${binary}" "${source}"
+		done
+	done
+}
+
+
+
+
+
+
+
+
+docker_init() {
+	# Check if docker image are already build, if not, build it.
+	if [[ "$(docker images -q "clank-plugin-dev:latest" 2>/dev/null)" == "" ]]; then
+		log "The docker image 'clank-plugin-dev' was not found, building ..."
+		
+		docker build \
+			--force-rm \
+			--tag clank-plugin-dev \
+			.
+	fi
+}
+
+docker_shell() {
+	docker_init
+	log "==== NOTE ===="
+	log "> Project is mounted at /mnt"
+	log "> You will be running as the root user in the container"
+	docker run --rm --interactive --tty \
+		-v "$(pwd):/mnt" \
+		clank-plugin-dev /bin/bash
+}
+
+docker_run() {
+	docker_init
+	docker run --rm --interactive --tty \
+		-u $(id -u ${USER}):$(id -g ${USER}) \
+		-v "$(pwd):/mnt" \
+		clank-plugin-dev ${SCRIPT} run ${@}
+}
+
+docker_compile() {
+	docker_init
+	docker run --rm \
+		-u $(id -u ${USER}):$(id -g ${USER}) \
+		-v "$(pwd):/mnt" \
+		clank-plugin-dev ${SCRIPT} compile ${@}
+}
+
+docker_obfuscate() {
+	docker_init
+	docker run --rm \
+		-u $(id -u ${USER}):$(id -g ${USER}) \
+		-v "$(pwd):/mnt" \
+		clank-plugin-dev ${SCRIPT} obfuscate ${@}
+}
+
+docker_package() {
+	docker_init
+	docker run --rm \
+		-u $(id -u ${USER}):$(id -g ${USER}) \
+		-v "$(pwd):/mnt" \
+		clank-plugin-dev ${SCRIPT} package ${@}
+}
+
+# Menu
+case "$1" in
+	"debug" | "run" | "d" | "r")
+		require_installed "lua", "Lua 5.3+"
+		DIRS="${@:2}"
+		if [ "$2" == "" ]; then
+			DIRS="$(find plugins/* -maxdepth 1 -type d -printf '%p ')"
+		fi
+	    run ${DIRS}
+	;;
+	"compile" | "c")
+		require_installed "lua", "Lua 5.3+"
+		require_installed "luac", "Lua Compiler 5.3+"
+		DIRS="${@:2}"
+		if [ "$2" == "" ]; then
+			DIRS="$(find plugins/* -maxdepth 1 -type d -printf '%p ')"
+		fi
+	    compile ${DIRS}
+	;;
+	"obfuscate" | "o")
+		require_installed "lua", "Lua 5.3+"
+		require_installed "luac", "Lua Compiler 5.3+"
+		DIRS="${@:2}"
+		if [ "$2" == "" ]; then
+			DIRS="$(find plugins/* -maxdepth 1 -type d -printf '%p ')"
+		fi
+		obfuscate ${DIRS}
+	;;
+	"package" | "p")
+		require_installed "zip", "Zip 3.0+"
+		DIRS="${@:2}"
+		if [ "$2" == "" ]; then
+			DIRS="$(find plugins/* -maxdepth 1 -type d -printf '%p ')"
+		fi
+		obfuscate ${DIRS}
+	;;
+	"dshell" | "ds")
+		require_installed "docker", "Docker"
+	    docker_shell
+	;;
+	"drun" | "dr")
+		require_installed "docker", "Docker"
+		DIRS="${@:2}"
+		if [ "$2" == "" ]; then
+			DIRS="$(find plugins/* -maxdepth 1 -type d -printf '%p ')"
+		fi
+	    docker_run ${DIRS}
+	;;
+	"dcompile" | "dc")
+		require_installed "docker", "Docker"
+		DIRS="${@:2}"
+		if [ "$2" == "" ]; then
+			DIRS="$(find plugins/* -maxdepth 1 -type d -printf '%p ')"
+		fi
+	    docker_compile ${DIRS}
+	;;
+	"dobfuscate" | "do")
+		require_installed "docker", "Docker"
+		DIRS="${@:2}"
+		if [ "$2" == "" ]; then
+			DIRS="$(find plugins/* -maxdepth 1 -type d -printf '%p ')"
+		fi
+	    docker_obfuscate ${DIRS}
+	;;
+	*)
+		echo -e "========================"
+		echo -e "Clank Plugin Dev Utility"
+		echo -e "========================"
+		echo -e ""
+		echo -e " Commands:"
+		echo -e "  * debug,run,d,r [plugin] .... Debug a specific plugin or all plugins"
+		echo -e "  * compile,c ................. Compile all Lua plugins to bytecode"
+		#echo -e "  * obfuscate,o ............... Obfuscate and compile all Lua plugins to bytecode"
+		#echo -e "  * package,p ................. Package/compress compiled Lua plugins"
+		echo -e ""
+		echo -e " Docker Dev Commands:"
+		echo -e "  * dshell,ds ................. Start a shell inside the clank-plugin-dev container"
+		echo -e "  * drun,dr [plugin] .......... Run 'run' inside the clank-plugin-dev container"
+		echo -e "  * dcompile,dc [plugin] ...... Run 'compile' inside the clank-plugin-dev container"
+		#echo -e "  * dobfuscate,do [plugin] .... Run 'obfuscate' inside the clank-plugin-dev container"
+		#echo -e "  * dpackage,dp [plugin] ...... Run 'package' inside the clank-plugin-dev container"
+	;;
+esac
+
