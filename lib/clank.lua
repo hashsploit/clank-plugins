@@ -17,7 +17,6 @@ local function onConnection(func)
 	
 end
 
-
 clank.sleep = sleep
 clank.getConfig = getConfig
 clank.getPluginPath = getPluginPath

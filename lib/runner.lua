@@ -9,7 +9,7 @@ clank = require("clank")
 
 local console_thread = nil
 local running = true
-local g_plugin_path = clank.getPluginPath()
+local g_plugin_path = clank.getPluginPath
 local g_print = _G["print"]
 local plugins = {}
 local commands = {}
@@ -34,7 +34,14 @@ local function split(inputstr, sep)
 end
 
 local function loadPlugin(plugin, plugin_path)
+
+	local function pluginPath()
+		return "./"..plugin_path.."/"
+	end
+	
+	clank.getPluginPath = pluginPath
 	local config = plugin()
+	clank.getPluginPath = g_plugin_path
 	
 	local function verToStr(version)
 		return version.major.."."..version.minor.."."..version.revision
@@ -60,7 +67,10 @@ local function loadPlugin(plugin, plugin_path)
 		log("init.lua: 'name' must be more than 3 characters but less than 32")
 		return
 	end
-	-- TODO check if name has only valid non-special characters
+	if not config["name"]:match("[A-Za-z0-9-_]") then
+		log("init.lua: 'name' must be alphanumeric [A-Za-z0-9-_]")
+		return
+	end
 	-- TODO check if path name contains name
 	
 	-- Description check
@@ -179,22 +189,44 @@ local function loadPlugin(plugin, plugin_path)
 		table.insert(commands, command)
 	end
 	
-	-- Run plugin init sequence
-	_G["print"] = g_print
-	print(colors("%{bright green}Successfully loaded "..config.name.." v"..verToStr(config.version).." loaded @ "..tostring(config).."%{reset}"))
 	plugins[config.name] = {}
 	plugins[config.name]["config"] = config
 	plugins[config.name]["enabled"] = true
 	
 	_G["print"] = log
-	config.events.PLUGIN_INIT_EVENT()
+	clank.getPluginPath = pluginPath
+	
+	-- Run plugin init sequence
+	if config.events.PLUGIN_INIT_EVENT ~= nil then
+		local status, msg = pcall(config.events.PLUGIN_INIT_EVENT)
+		if not status then
+			_G["print"] = g_print
+			print(colors("%{bright red}Error:%{reset} while issuing PLUGIN_INIT_EVENT for "..config.name))
+			print(msg)
+			_G["print"] = log
+			plugins[config.name]["enabled"] = false
+		end
+	end
+	
+	
+	if plugins[config.name].enabled then
+		_G["print"] = g_print
+		print(colors("%{bright green}Success:%{reset} Loaded "..config.name.." v"..verToStr(config.version).." @ "..tostring(config).."%{reset}"))
+		_G["print"] = log
+	end
 	
 	-- internal plugin loop
 	while plugins[config.name].enabled do
 		_G["print"] = log
 		
 		if config.events.TICK_EVENT ~= nil then
-			config.events.TICK_EVENT()
+			local status, msg = pcall(config.events.TICK_EVENT)
+			if not status then
+				_G["print"] = g_print
+				print(colors("%{bright red}Error:%{reset} while issuing TICK_EVENT for "..config.name))
+				print(msg)
+				_G["print"] = log
+			end
 		end
 		
 		local a = coroutine.yield()
@@ -206,6 +238,7 @@ local function loadPlugin(plugin, plugin_path)
 		end
 		
 		_G["print"] = g_print
+		clank.getPluginPath = g_plugin_path
 	end
 	
 	-- Remove bound cli commands
@@ -219,9 +252,16 @@ local function loadPlugin(plugin, plugin_path)
 	end
 	
 	-- Run plugin shutdown sequence
-	_G["print"] = log
-	config.events.PLUGIN_SHUTDOWN_EVENT()
+	if config.events.PLUGIN_SHUTDOWN_EVENT ~= nil then
+		_G["print"] = log
+		local status, msg = pcall(config.events.PLUGIN_SHUTDOWN_EVENT)
+		if not status then
+			print("Error while shutting down: " .. msg)
+		end
+	end
+	
 	_G["print"] = g_print
+	clank.getPluginPath = g_plugin_path
 	
 	table.remove(plugins, config.name)
 	plugins[config.name] = nil
@@ -231,44 +271,57 @@ end
 
 
 local function loadSource(path)
+
+	_G["print"] = g_print
+	clank.getPluginPath = g_plugin_path
+	
 	local file = io.open(path.."/init.lua", "rb")
 	
 	if file == nil or not file then
 		file = io.open(path.."/init.lub", "rb")
 		
 		if file == nil or not file then
-			print(colors("%{bright red}Error:%{reset} File "..path.."/init.lua not found!"))
+			print(colors("%{bright red}Error:%{reset} file "..path.."/init.lua not found!"))
 			return
 		end
 	end
 	
 	local source = file:read("*a")
-	local chunk = load(source)
+	local status, chunk = pcall(load, source)
+	
+	if not status then
+		print(colors("%{bright red}Error:%{reset} failed to load source "..path..": "..chunk))
+		return
+	end
 	
 	if type(chunk) ~= "function" then
-		print(colors("%{bright red}Error%{reset} Bad source "..path.."/init.lua !"))
+		print(colors("%{bright red}Error%{reset} bad source "..path.."/init.lua !"))
 		return
 	end
 	
 	for k, v in pairs(plugins) do
 		if v.path == path then
-			print(colors("%{bright red}Error:%{reset} Plugin '"..k.."' already loaded!"))
+			print(colors("%{bright red}Error:%{reset} plugin '"..k.."' already loaded!"))
 			return
 		end
 	end
 	
 	local plugin_thread = coroutine.create(function()
 		loadPlugin(chunk, path)
+		local status, msg = pcall(loadPlugin, chunk, path)
+		if not status then
+			_G["print"] = g_print
+			print(colors("%{bright red}Error:%{reset} failed to load plugin '"..path.."': "..msg))
+			return
+		end
 	end)
 	
 	coroutine.resume(plugin_thread)
-	
-	clank.sleep(100)
-	
+	clank.sleep(10)
 	local loaded = false
+	
 	for k, v in pairs(plugins) do
 		if string.find(path, k, nil, "plain") then
-			print(colors(path.." -> "..tostring(plugin_thread)))
 			plugins[k]["enabled"] = true
 			plugins[k]["thread"] = plugin_thread
 			plugins[k]["path"] = path
@@ -276,6 +329,9 @@ local function loadSource(path)
 			break
 		end
 	end
+	
+	_G["print"] = g_print
+	clank.getPluginPath = g_plugin_path
 	
 	if not loaded then
 		print(colors("%{bright red}Error:%{reset} failed to load plugin "..path))
@@ -290,7 +346,8 @@ local function console()
 		coroutine.yield()
 		
 		_G["print"] = g_print
-		io.write("> ")
+		clank.getPluginPath = g_plugin_path
+		io.write(colors("%{blink reverse}>%{reset} "))
 		local cmd = io.read("*L")
 		
 		if cmd == nil then
@@ -305,19 +362,22 @@ local function console()
 		if cmd[1] == "exit" then
 			running = false
 			return
-		elseif cmd[1] == "help" then
-			print(colors("---- Commands (%{bright green}*%{reset} are built in) ----"))
-			print(colors(" - exit%{bright green}*%{reset} = Quit the clank debugger"))
-			print(colors(" - help%{bright green}*%{reset} = Show available commands"))
-			print(colors(" - lo%{bright green}*%{reset} <plugin> = Load a plugin"))
-			print(colors(" - ul%{bright green}*%{reset} <plugin> = Unload a plugin"))
-			print(colors(" - re%{bright green}*%{reset} [plugin] = Reload a plugin or all plugins"))
-			print(colors(" - t%{bright green}*%{reset} = Show available threads"))
-			print(colors(" - i%{bright green}*%{reset} <plugin> = Show configuration of <plugin>"))
+		elseif cmd[1] == "help" or cmd[1] == "?" then
+			print(colors("%{underline}    Commands (%{bright green}*%{reset}%{underline} are built in)    %{reset}"))
+			print(colors(" - exit,^D%{bright green}*%{reset} = Quit the clank debugger"))
+			print(colors(" - help,?%{bright green}*%{reset} = Show available commands"))
+			print(colors(" - load,lo%{bright green}*%{reset} <plugin> = Load a plugin"))
+			print(colors(" - unload,ul%{bright green}*%{reset} <plugin> = Unload a plugin"))
+			print(colors(" - reload,re%{bright green}*%{reset} [plugin] = Reload a plugin or all plugins"))
+			print(colors(" - threads,t%{bright green}*%{reset} = Show available threads"))
+			print(colors(" - inspect,i%{bright green}*%{reset} <plugin> = Show configuration of <plugin>"))
+			print(colors(" - ginspect,g%{bright green}*%{reset} = Show all globals"))
+			
 			for i=1, #commands do
 				print(colors(" - %{bright blue}"..commands[i].command.."%{reset} = "..commands[i].description.." ("..tostring(commands[i].func):gsub("function: ", "")..")"))
 			end
-		elseif cmd[1] == "lo" then
+			
+		elseif cmd[1] == "load" or cmd[1] == "lo" then
 			if #cmd == 2 then
 				local status, msg = pcall(loadSource, "plugins/"..cmd[2])
 				collectgarbage("collect")
@@ -327,7 +387,7 @@ local function console()
 			else
 				print("Usage: "..cmd[1].." <plugin>")
 			end
-		elseif cmd[1] == "ul" then
+		elseif cmd[1] == "unload" or cmd[1] == "ul" then
 			if #cmd == 2 then
 				local success = false
 				for k, v in pairs(plugins) do
@@ -344,7 +404,7 @@ local function console()
 			else
 				print("Usage: "..cmd[1].." <plugin>")
 			end
-		elseif cmd[1] == "re" then
+		elseif cmd[1] == "reload" or cmd[1] == "re" then
 			if #cmd == 2 then
 				-- Unload specific plugin
 				local success = false
@@ -401,14 +461,14 @@ local function console()
 			else
 				print("Usage: "..cmd[1].." [plugin]")
 			end
-		elseif cmd[1] == "t" then
+		elseif cmd[1] == "threads" or cmd[1] == "t" then
 			local _plugins = {}
 			for k, v in pairs(plugins) do
 				local status = (coroutine.status(v.thread) == "suspended" and "loaded" or "unloaded")
 				table.insert(_plugins, {plugin=k,status=status,thread=tostring(v.thread)})
 			end
 			print(colors(tabular(_plugins, nil, true)))
-		elseif cmd[1] == "i" then
+		elseif cmd[1] == "inspect" or cmd[1] == "i" then
 			if #cmd >= 2 then
 				local success = false
 				for k, v in pairs(plugins) do
@@ -423,6 +483,8 @@ local function console()
 			else
 				print("Usage: "..cmd[1].." <plugin>")
 			end
+		elseif cmd[1] == "ginspect" or cmd[1] == "g" then
+			print(tabular(_G, nil, true))
 		end
 		
 		for i=1, #commands do

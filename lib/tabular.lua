@@ -5,10 +5,10 @@ local _require = require
 local ansicolors = _require("ansicolors")
 
 local draw = {
-   NW = "/",
-   NE = "\\",
-   SW = "\\",
-   SE = "/",
+   NW = "+",
+   NE = "+",
+   SW = "+",
+   SE = "+",
    N = "+",
    S = "+",
    E = "+",

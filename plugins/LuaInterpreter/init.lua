@@ -35,10 +35,7 @@ return {
 		minor = 1,
 		revision = 0
 	},
-	events = {
-		PLUGIN_INIT_EVENT = function() print("Initialized.") end,
-		PLUGIN_SHUTDOWN_EVENT = nil
-	},
+	events = {},
 	run_on = {
 		"MEDIUS_UNIVERSE_INFORMATION_SERVER",
 		"MEDIUS_AUTHENTICATION_SERVER",
