@@ -48,7 +48,11 @@ local function loadPlugin(plugin, plugin_path)
 	end
 	
 	local function log(...)
-		g_print("["..config.name.."] ".. ...)
+		local msg = ...
+		if msg == nil then
+			msg = ""
+		end
+		g_print("["..config.name.."] ".. tostring(msg))
 	end
 	
 	-- Perform plugin sanity inspections
