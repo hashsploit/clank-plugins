@@ -157,7 +157,7 @@ case "$1" in
 		require_installed "lua", "Lua 5.3+"
 		DIRS="${@:2}"
 		if [ "$2" == "" ]; then
-			DIRS="$(find plugins/* -maxdepth 1 -type d -printf '%p ')"
+			DIRS="$(find plugins/* -maxdepth 0 -type d -printf '%p ')"
 		fi
 	    run ${DIRS}
 	;;

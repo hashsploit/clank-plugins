@@ -1,19 +1,20 @@
-local tp = require("plugins.hello-world.hello-world")
+local hello = require("plugins.HelloWorld.hello")
 
 return {
-	name = "hello-world",
+	name = "HelloWorld",
 	description = "Hello World is an example Clank Plugin",
 	version = {
 		major = 0,
 		minor = 1,
-		revision = 0
+		patch = 0
 	},
+	depends = {},
 	events = {
-		PLUGIN_INIT_EVENT = tp.init,
-		PLUGIN_SHUTDOWN_EVENT = tp.shutdown,
-		TICK_EVENT = tp.onTick,
-		CONNECT_EVENT = tp.onConnect,
-		DISCONNECT_EVENT = tp.onDisconnect
+		PLUGIN_INIT_EVENT = hello.init,
+		PLUGIN_SHUTDOWN_EVENT = hello.shutdown,
+		TICK_EVENT = hello.onTick,
+		CONNECT_EVENT = hello.onConnect,
+		DISCONNECT_EVENT = hello.onDisconnect
 	},
 --	run_on = 0x01 | 0x02 | 0x04 | 0x08 | 0x10
 	run_on = {
@@ -26,11 +27,11 @@ return {
 	commands = {
 		hello = {
 			description = "Says hello!",
-			handler = tp.command.hello
+			handler = hello.command.hello
 		},
 		luatime = {
 			description = "Prints the Lua os.time()",
-			handler = tp.command.luatime
+			handler = hello.command.luatime
 		}
 	}
 }

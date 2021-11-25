@@ -14,15 +14,23 @@ local g_print = _G["print"]
 local plugins = {}
 local commands = {}
 
-local function startsWith(str, start)
+string.startsWith = function(str, start)
 	return str:sub(1, #start) == start
 end
 
-local function endsWith(str, ending)
+string.endsWith = function(str, ending)
 	return ending == "" or str:sub(-#ending) == ending
 end
 
-local function split(inputstr, sep)
+local function regexEscape(str)
+	return str:gsub("[%(%)%.%%%+%-%*%?%[%^%$%]]", "%%%1")
+end
+
+string.replace = function(str, this, that)
+	return str:gsub(regexEscape(this), that:gsub("%%", "%%%%"))
+end
+
+string.split = function(inputstr, sep)
 	if sep == nil then
 		sep = "%s"
 	end
@@ -44,7 +52,7 @@ local function loadPlugin(plugin, plugin_path)
 	clank.getPluginPath = g_plugin_path
 	
 	local function verToStr(version)
-		return version.major.."."..version.minor.."."..version.revision
+		return version.major.."."..version.minor.."."..version.patch
 	end
 	
 	local function log(...)
@@ -104,13 +112,46 @@ local function loadPlugin(plugin, plugin_path)
 		log("init.lua: 'version.minor' must be a number from 0-255")
 		return
 	end
-	if config["version"]["revision"] == nil or tonumber(config["version"]["revision"]) == nil then
-		log("init.lua: 'version.revision' must be a number from 0-255")
+	if config["version"]["patch"] == nil or tonumber(config["version"]["patch"]) == nil then
+		log("init.lua: 'version.patch' must be a number from 0-255")
 		return
 	end
-	if tonumber(config["version"]["revision"]) < 0 or tonumber(config["version"]["revision"]) > 255 then
-		log("init.lua: 'version.revision' must be a number from 0-255")
+	if tonumber(config["version"]["patch"]) < 0 or tonumber(config["version"]["patch"]) > 255 then
+		log("init.lua: 'version.patch' must be a number from 0-255")
 		return
+	end
+	
+	-- Depends check
+	local missing_dependency = false
+	if config["depends"] == nil or type(config["depends"]) ~= "table" then
+		log("init.lua: 'depends' must be a table")
+		return
+	end
+	if next(config["depends"]) then
+		for i, _ in pairs(config["depends"]) do
+			if plugins[i] == nil then
+				missing_dependency = true
+			end
+		end
+	end
+	
+	-- Set plugin object
+	plugins[config.name] = {}
+	
+	while missing_dependency do
+		missing_dependency = false
+		plugins[config.name]["missing_dependency"] = nil
+		
+		for i, _ in pairs(config["depends"]) do
+			local dependency_name = config["depends"][i]
+			
+			if plugins[dependency_name] == nil then
+				missing_dependency = true
+				plugins[config.name]["missing_dependency"] = dependency_name
+			end
+		end
+		
+		coroutine.yield()
 	end
 	
 	-- Events check
@@ -119,7 +160,7 @@ local function loadPlugin(plugin, plugin_path)
 		return
 	end
 	for k, v in pairs(config["events"]) do
-		if not endsWith(k, "_EVENT") and type(v) ~= "function" then
+		if not k:endsWith("_EVENT") and type(v) ~= "function" then
 			log("init.lua: 'events."..k.."' must be a function")
 			return
 		end
@@ -193,7 +234,7 @@ local function loadPlugin(plugin, plugin_path)
 		table.insert(commands, command)
 	end
 	
-	plugins[config.name] = {}
+	-- Set plugin as enabled
 	plugins[config.name]["config"] = config
 	plugins[config.name]["enabled"] = true
 	
@@ -299,7 +340,7 @@ local function loadSource(path)
 	end
 	
 	if type(chunk) ~= "function" then
-		print(colors("%{bright red}Error%{reset} bad source "..path.."/init.lua !"))
+		print(colors("%{bright red}Error:%{reset} bad source "..path.."/init.lua !"))
 		return
 	end
 	
@@ -323,13 +364,17 @@ local function loadSource(path)
 	coroutine.resume(plugin_thread)
 	clank.sleep(10)
 	local loaded = false
+	local waiting_on_dependency = false
 	
 	for k, v in pairs(plugins) do
 		if string.find(path, k, nil, "plain") then
-			plugins[k]["enabled"] = true
 			plugins[k]["thread"] = plugin_thread
 			plugins[k]["path"] = path
 			loaded = true
+			if plugins[k]["missing_dependency"] ~= nil then
+				waiting_on_dependency = true
+			end
+			
 			break
 		end
 	end
@@ -361,7 +406,7 @@ local function console()
 		
 		cmd = cmd:gsub("\r", "")
 		cmd = cmd:gsub("\n", "")
-		cmd = split(cmd)
+		cmd = cmd:split()
 		
 		if cmd[1] == "exit" then
 			running = false
@@ -519,7 +564,28 @@ for i=1, #arg do
 	loadSource(arg[i])
 end
 
+
+local waiting_for_dependencies_count = 0
+
 _G["print"] = g_print
+while waiting_for_dependencies_count < 1000 do
+	waiting_for_dependencies_count = 1000
+	
+	for k, v in pairs(plugins) do
+		if plugins[k]["missing_dependency"] ~= nil then
+			waiting_for_dependencies_count = waiting_for_dependencies_count + 1
+			coroutine.resume(v.thread)
+		end
+	end
+end
+
+_G["print"] = g_print
+for k, v in pairs(plugins) do
+	if plugins[k]["missing_dependency"] ~= nil then
+		print(colors("%{bright red}Error:%{reset} Plugin " .. k .. " failed to load due to missing dependency '" .. plugins[k]["missing_dependency"] .. "'"))
+		plugins[k] = nil
+	end
+end
 
 while running do
 	

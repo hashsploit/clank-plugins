@@ -31,10 +31,11 @@ return {
 	name = "LuaInterpreter",
 	description = "Lua interpreter from the CLI",
 	version = {
-		major = 0,
-		minor = 1,
-		revision = 0
+		major = 1,
+		minor = 0,
+		patch = 0
 	},
+	depends = {},
 	events = {},
 	run_on = {
 		"MEDIUS_UNIVERSE_INFORMATION_SERVER",

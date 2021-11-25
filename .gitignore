@@ -6,3 +6,9 @@
 # Bins
 bin/
 
+# Private plugins
+plugins/uya
+plugins/UYA
+plugins/uya-*
+plugins/UYA-*
+
